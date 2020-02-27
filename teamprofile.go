@@ -67,7 +67,7 @@ func teamProfile(chatID int64, u string) {
 	text = text + fmt.Sprintf("*Country:* %s\n", doc.Find(".team-country").Text())
 
 	doc.Find(".profile-team-stat").Each(func(i int, s *goquery.Selection) {
-		text = text + fmt.Sprintf("*%s*: %s\n", s.Find("b").Text(), s.Find("span").Text())
+		text = text + fmt.Sprintf("*%s*: %s\n", s.Find("b").Text(), strings.Replace(s.Find("span").Text(), "#", "", 1))
 	})
 
 	// Players
