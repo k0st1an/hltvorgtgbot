@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -91,7 +92,7 @@ func teamProfile(chatID int64, u string) {
 
 		doc.Find(".trophyHolder").Each(func(i int, s *goquery.Selection) {
 			if title, ok := s.Find("span").Attr("title"); ok {
-				text = text + fmt.Sprintf("- %s\n", title)
+				text = text + fmt.Sprintf("- %s\n", escapeAllUndescore(title))
 			}
 		})
 	}
@@ -138,4 +139,8 @@ func teamProfile(chatID int64, u string) {
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "markdown"
 	bot.Send(msg)
+}
+
+func escapeAllUndescore(s string) string {
+	return strings.ReplaceAll(s, "_", "\\_")
 }
