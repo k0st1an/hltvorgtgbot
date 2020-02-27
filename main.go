@@ -41,7 +41,7 @@ func main() {
 		if update.CallbackQuery != nil {
 			switch strings.Split(update.CallbackQuery.Data, "_")[0] {
 			case "teamprofile":
-				go teamProfile(bot, update.CallbackQuery.Message.Chat.ID, strings.Split(update.CallbackQuery.Data, "_")[1])
+				go teamProfile(update.CallbackQuery.Message.Chat.ID, strings.Split(update.CallbackQuery.Data, "_")[1])
 			}
 		}
 

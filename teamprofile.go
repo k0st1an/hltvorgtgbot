@@ -49,7 +49,7 @@ func makeColumn(nColums int, data [][]string) (rows [][]tgbotapi.InlineKeyboardB
 	return
 }
 
-func teamProfile(bot *tgbotapi.BotAPI, chatID int64, u string) {
+func teamProfile(chatID int64, u string) {
 	res, err := request(u)
 	if err != nil {
 		log.Fatalln(err)
