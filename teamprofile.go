@@ -74,7 +74,7 @@ func teamProfile(chatID int64, u string) {
 	doc.Find(".bodyshot-team").Find("a").Each(func(i int, s *goquery.Selection) {
 		text = text + fmt.Sprintf("[%s](%s%s), ", s.AttrOr("title", ""), baseURL, s.AttrOr("href", ""))
 	})
-	text = text + "\n"
+	text = text[0:len(text)-2] + "\n" // delete last comma
 
 	// Links
 	text = text + "*Links:*\n"
