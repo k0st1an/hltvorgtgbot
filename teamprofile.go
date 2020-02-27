@@ -92,7 +92,7 @@ func teamProfile(chatID int64, u string) {
 
 		doc.Find(".trophyHolder").Each(func(i int, s *goquery.Selection) {
 			if title, ok := s.Find("span").Attr("title"); ok {
-				text = text + fmt.Sprintf("- %s\n", escapeAllUndescore(title))
+				text = text + fmt.Sprintf("- %s\n", strings.ReplaceAll(title, "_", "\\_"))
 			}
 		})
 	}
@@ -139,8 +139,4 @@ func teamProfile(chatID int64, u string) {
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "markdown"
 	bot.Send(msg)
-}
-
-func escapeAllUndescore(s string) string {
-	return strings.ReplaceAll(s, "_", "\\_")
 }
