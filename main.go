@@ -53,6 +53,8 @@ func main() {
 				go teamProfileButton(update.Message.Chat.ID)
 			case "statsplayers":
 				go statsPlayers(update.Message.Chat.ID)
+			case "matches":
+				go matches(update.Message.Chat.ID)
 			}
 		}
 	}
