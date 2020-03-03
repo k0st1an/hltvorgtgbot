@@ -8,7 +8,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
-const limitDays = 3
+const limitDays = 2
 
 func matches(chatID int64) {
 	res, err := request(baseURL + "/matches")
