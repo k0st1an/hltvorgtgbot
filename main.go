@@ -55,6 +55,8 @@ func main() {
 				go statsPlayers(update.Message.Chat.ID)
 			case "matches":
 				go matches(update.Message.Chat.ID)
+			case "livematches":
+				go liveMatches(update.Message.Chat.ID)
 			}
 		}
 	}
