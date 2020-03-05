@@ -8,7 +8,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
-const limitDays = 3
+const limitDays = 2
 
 func matches(chatID int64) {
 	res, err := request(baseURL + "/matches")
@@ -94,7 +94,7 @@ func liveMatches(chatID int64) {
 	}
 
 	doc.Find(".live-match a").Each(func(i int, layer1 *goquery.Selection) {
-		text = fmt.Sprintf("- %s, ", layer1.Find(".event-name").Text())
+		text = text + fmt.Sprintf("- %s, ", layer1.Find(".event-name").Text())
 
 		layer1.Find(".team-name").Each(func(i int, layer2 *goquery.Selection) {
 			text = text + layer2.Text()
