@@ -9,4 +9,5 @@ worldrank - CS:GO World ranking
 teamprofile - Team profile
 statsplayers - Stats players
 matches - Upcoming matches for two days
+livematches - Live matches
 ```

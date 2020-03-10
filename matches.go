@@ -23,13 +23,41 @@ func matches(chatID int64) {
 	}
 
 	var text string
-	matchesBool := true
-	doc.Find(".match-day").Each(func(i int, s *goquery.Selection) {
-		if matchesBool {
-			text = fmt.Sprintf("*Upcoming CS:GO matches* (%d days):\n", limitDays)
-			matchesBool = false
+
+	if doc.Find(".match-day").Length() > 0 || doc.Find(".live-match a").Length() > 0 {
+		text = fmt.Sprintf("*Upcoming CS:GO matches* (%d days):\n", limitDays)
+	}
+
+	// Live matches
+	if doc.Find(".live-match a").Length() > 0 {
+		text = text + "- live:\n"
+	}
+
+	doc.Find(".live-match a").Each(func(i int, live *goquery.Selection) {
+		text = text + fmt.Sprintf("  - %s, ", live.Find(".event-name").Text())
+
+		text = text + "["
+		live.Find(".team-name").Each(func(i int, layer2 *goquery.Selection) {
+			text = text + layer2.Text()
+			if i == 0 {
+				text = text + " vs "
+			}
+		})
+		text = text + fmt.Sprintf("](%s)", baseURL+live.AttrOr("href", "/matches"))
+		text = text + fmt.Sprintf(", %s", live.Find(".bestof").Text())
+
+		if live.Find(".star").Length() > 0 {
+			text = text + ", "
+			for i := 0; i < live.Find(".star").Length(); i++ {
+				text = text + "+"
+			}
 		}
 
+		text = text + "\n"
+	})
+
+	// Matches
+	doc.Find(".match-day").Each(func(i int, s *goquery.Selection) {
 		if i > limitDays-1 {
 			return
 		}
@@ -41,35 +69,39 @@ func matches(chatID int64) {
 
 			if s.Find(".team").Length() == 2 {
 				// Match
+				text = text + "["
 				s.Find(".team").Each(func(i int, s *goquery.Selection) {
 					text = text + fmt.Sprintf(" %s", s.Text())
 					if i == 0 {
 						text = text + " vs"
 					}
 				})
+				text = text + fmt.Sprintf("](%s)", baseURL+s.Find("a").AttrOr("href", "/matches"))
 
 				text = text + fmt.Sprintf(", %s", s.Find(".event").Text())
-				text = text + fmt.Sprintf(", %s, ", s.Find(".map-text").Text())
+				text = text + fmt.Sprintf(", %s", s.Find(".map-text").Text())
+
 				if s.Find(".star").Length() > 0 {
+					text = text + ", "
 					for i := 0; i < s.Find(".star").Length(); i++ {
 						text = text + "+"
 					}
-					text = text + ", "
 				}
 			} else {
 				// Event
 				text = text + fmt.Sprintf(" %s, ", s.Find(".placeholder-text-cell").Text())
 			}
 
-			text = text + fmt.Sprintf("[match page](%s)\n", baseURL+s.Find("a").AttrOr("href", "http://none"))
+			text = text + "\n"
 		})
 	})
 
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "markdown"
+
 	_, err = bot.Send(msg)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
 	}
 }
