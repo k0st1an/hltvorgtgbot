@@ -127,9 +127,8 @@ func teamProfile(chatID int64, u string) {
 			}
 
 			// Matches
-			tmp = tmp + fmt.Sprintf("  - %s, ", layer2.Find(".date-cell span").Text())
-			tmp = tmp + fmt.Sprintf("%s vs %s, ", layer2.Find(".team-center-cell .team-1 span").Text(), layer2.Find(".team-center-cell .team-2 span").Text())
-			tmp = tmp + fmt.Sprintf("[page of match](%s%s)\n", baseURL, layer2.Find("a").AttrOr("href", ""))
+			tmp = tmp + fmt.Sprintf("  - %s, [", layer2.Find(".date-cell span").Text())
+			tmp = tmp + fmt.Sprintf("%s vs %s](%s)\n", layer2.Find(".team-center-cell .team-1 span").Text(), layer2.Find(".team-center-cell .team-2 span").Text(), baseURL+layer2.Find("a").AttrOr("href", ""))
 		})
 
 		text = text + tmp
