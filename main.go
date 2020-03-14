@@ -48,7 +48,7 @@ func main() {
 		if update.Message != nil { // ignore any non-Message updates
 			switch msg := update.Message.Command(); msg {
 			case "worldrank":
-				go worldRank(update.Message.Chat.ID)
+				go worldRanking(update.Message.Chat.ID)
 			case "teamprofile":
 				go teamProfileButton(update.Message.Chat.ID)
 			case "statsplayers":

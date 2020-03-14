@@ -1,47 +1,78 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
 	"log"
+	"text/template"
 
 	"github.com/PuerkitoBio/goquery"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
-func worldRank(chatID int64) {
+type worldRankingTeams struct {
+	Title string
+	Teams []team
+}
+
+type team struct {
+	Name, Points, Change, URL string
+}
+
+func worldRanking(chatID int64) {
 	res, err := request(baseURL + "/ranking/teams")
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
+		return
 	}
 	defer res.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
+		return
 	}
 
-	text := fmt.Sprintf("*%s* (team, points, change):\n", doc.Find(".regional-ranking-header").Text())
+	ranking := worldRankingTeams{Title: doc.Find(".regional-ranking-header").Text()}
 
 	doc.Find(".ranked-team").Each(func(i int, s *goquery.Selection) {
-		text = text + fmt.Sprintf("%d. ", i+1)
-
-		if v, ok := s.Find(".details").Attr("href"); ok {
-			text = text + fmt.Sprintf(" [%s](%s)", s.Find(".name").Text(), baseURL+v)
-		} else {
-			text = text + fmt.Sprintf(" %s", s.Find(".name").Text())
+		teamTmp := team{
+			Name:   s.Find(".name").Text(),
+			Points: s.Find(".points").Text()[1 : len(s.Find(".points").Text())-1],
+			URL:    baseURL + s.Find(".details").AttrOr("href", "/ranking/teams"),
 		}
-
-		text = text + fmt.Sprintf(", %s", s.Find(".points").Text()[1:len(s.Find(".points").Text())-1])
 
 		if s.Find(".change").Text() != "-" {
-			text = text + fmt.Sprintf(", %s\n", s.Find(".change").Text())
-		} else {
-			text = text + "\n"
+			teamTmp.Change = s.Find(".change").Text()
 		}
+
+		ranking.Teams = append(ranking.Teams, teamTmp)
 	})
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	tpl, err := template.New("").Funcs(template.FuncMap{
+		"add": func(n, i int) int { return n + i },
+	}).Parse(worldRankingTpl)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var tplBuf bytes.Buffer
+
+	err = tpl.Execute(&tplBuf, ranking)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	msg := tgbotapi.NewMessage(chatID, tplBuf.String())
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "markdown"
 	bot.Send(msg)
 }
+
+var worldRankingTpl = `
+*{{ .Title }}*:
+{{- range $i, $item := .Teams }}
+{{ add $i 1 }}. [{{ $item.Name }}]({{ $item.URL }}), {{ $item.Points }}{{ if $item.Change }}, {{ $item.Change }}{{ end -}}
+{{ end }}
+`
