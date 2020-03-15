@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"log"
 	"text/template"
 
@@ -75,8 +74,6 @@ func statsPlayers(chatID int64) {
 		log.Println(err)
 		return
 	}
-
-	fmt.Println(tplBuf.String())
 
 	msg := tgbotapi.NewMessage(chatID, tplBuf.String())
 	msg.DisableWebPagePreview = true
