@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
 	"log"
 	"strings"
+	"text/template"
 
 	"github.com/PuerkitoBio/goquery"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -50,6 +51,32 @@ func makeColumn(nColums int, data [][]string) (rows [][]tgbotapi.InlineKeyboardB
 	return
 }
 
+type teamProfileData struct {
+	Name, Country, WorldRanking, WeekInTop30, AveragePlayerAge string
+	Players                                                    []player
+	Links                                                      []string
+	Trophies                                                   []string
+	UpcomingEvents                                             []upcomingEvents
+	UpcomingMatches                                            []upcomingMatch
+}
+
+type upcomingEvents struct {
+	Name, Date string
+}
+
+type player struct {
+	Name, URL string
+}
+
+type upcomingMatch struct {
+	Event   string
+	Matches []match
+}
+
+type match struct {
+	Date, Team1, Team2, URL string
+}
+
 func teamProfile(chatID int64, u string) {
 	res, err := request(u)
 	if err != nil {
@@ -62,80 +89,133 @@ func teamProfile(chatID int64, u string) {
 		log.Fatalln(err)
 	}
 
-	// Comman info
-	text := fmt.Sprintf("*Team name:* %s\n", doc.Find(".profile-team-name").Text())
-	text = text + fmt.Sprintf("*Country:* %s\n", doc.Find(".team-country").Text())
+	tp := teamProfileData{
+		Name:    doc.Find(".profile-team-name").Text(),
+		Country: strings.Trim(doc.Find(".team-country").Text(), " "),
+	}
 
+	// Comman info
 	doc.Find(".profile-team-stat").Each(func(i int, s *goquery.Selection) {
-		text = text + fmt.Sprintf("*%s*: %s\n", s.Find("b").Text(), strings.Replace(s.Find("span").Text(), "#", "", 1))
+		switch i {
+		case 0:
+			tp.WorldRanking = strings.Replace(s.Find("span").Text(), "#", "", 1)
+		case 1:
+			tp.WeekInTop30 = strings.Replace(s.Find("span").Text(), "#", "", 1)
+		case 2:
+			tp.AveragePlayerAge = strings.Replace(s.Find("span").Text(), "#", "", 1)
+		}
 	})
 
 	// Players
-	text = text + "*Players:* "
 	doc.Find(".bodyshot-team").Find("a").Each(func(i int, s *goquery.Selection) {
-		text = text + fmt.Sprintf("[%s](%s%s), ", s.AttrOr("title", ""), baseURL, s.AttrOr("href", ""))
+		tp.Players = append(tp.Players, player{
+			Name: s.AttrOr("title", "UNKNOWN"),
+			URL:  baseURL + s.AttrOr("href", u),
+		})
 	})
-	text = text[0:len(text)-2] + "\n" // delete last comma
 
 	// Links
-	text = text + "*Links:*\n"
-	text = text + fmt.Sprintf("- %s\n", u)
+	tp.Links = append(tp.Links, u)
 	doc.Find(".profile-team-some").Find("a").Each(func(i int, s *goquery.Selection) {
 		if link, ok := s.Attr("href"); ok {
-			text = text + fmt.Sprintf("- %s\n", link)
+			tp.Links = append(tp.Links, link)
 		}
 	})
 
 	// Trophies
 	if doc.Find(".trophyHolder").Length() > 0 {
-		text = text + fmt.Sprintf("*Trophies (%d):*\n", doc.Find(".trophyHolder").Length())
-
 		doc.Find(".trophyHolder").Each(func(i int, s *goquery.Selection) {
 			if title, ok := s.Find("span").Attr("title"); ok {
-				text = text + fmt.Sprintf("- %s\n", strings.ReplaceAll(title, "_", "\\_"))
+				tp.Trophies = append(tp.Trophies, strings.ReplaceAll(title, "_", "\\_"))
 			}
 		})
 	}
 
 	// Events
 	if doc.Find("#ongoingEvents").Length() > 0 {
-		text = text + "*Ongoing & upcoming events and leagues:*\n"
 		doc.Find("#ongoingEvents").Find(".ongoing-event").Each(func(i int, s *goquery.Selection) {
-			text = text + fmt.Sprintf("- %s, %s\n", s.Find(".eventbox-eventname").Text(), s.Find(".eventbox-date").Text())
+			tp.UpcomingEvents = append(tp.UpcomingEvents, upcomingEvents{
+				Name: s.Find(".eventbox-eventname").Text(),
+				Date: s.Find(".eventbox-date").Text()},
+			)
 		})
 	}
 
 	// Events and matches
-	matchesBool := true
-	doc.Find("#matchesBox .match-table").Each(func(i int, layer1 *goquery.Selection) {
-		var tmp string
+	doc.Find("#matchesBox .match-table").Each(func(i int, l1 *goquery.Selection) {
+		var uMatch upcomingMatch
 
-		eventName := true
-		layer1.Find(".team-row").Each(func(i int, layer2 *goquery.Selection) { // Event matches
-			if layer2.Find(".score-cell").Text() != "-:-" { // checking what will be
+		l1.Find(".team-row").Each(func(i int, l2 *goquery.Selection) { // Event matches
+			if l2.Find(".score-cell").Text() != "-:-" { // checking what will be
 				return
 			}
 
-			if matchesBool {
-				matchesBool = false
-				tmp = tmp + "*Upcoming matches:*\n"
-			}
-
-			if eventName {
-				eventName = false
-				tmp = tmp + fmt.Sprintf("- %s\n", layer1.Find(".text-ellipsis").Text()) // event name
+			if len(uMatch.Event) == 0 {
+				uMatch.Event = l1.Find(".text-ellipsis").Text()
 			}
 
 			// Matches
-			tmp = tmp + fmt.Sprintf("  - %s, [", layer2.Find(".date-cell span").Text())
-			tmp = tmp + fmt.Sprintf("%s vs %s](%s)\n", layer2.Find(".team-center-cell .team-1 span").Text(), layer2.Find(".team-center-cell .team-2 span").Text(), baseURL+layer2.Find("a").AttrOr("href", ""))
+			uMatch.Matches = append(uMatch.Matches, match{
+				Date:  l2.Find(".date-cell span").Text(),
+				Team1: l2.Find(".team-center-cell .team-1 span").Text(),
+				Team2: l2.Find(".team-center-cell .team-2 span").Text(),
+				URL:   baseURL + l2.Find("a").AttrOr("href", ""),
+			})
 		})
 
-		text = text + tmp
+		if len(uMatch.Event) > 0 {
+			tp.UpcomingMatches = append(tp.UpcomingMatches, uMatch)
+		}
 	})
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	tpl, err := template.New("").Parse(teamProfileTpl)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var tplBuf bytes.Buffer
+	tpl.Execute(&tplBuf, tp)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	msg := tgbotapi.NewMessage(chatID, tplBuf.String())
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "markdown"
 	bot.Send(msg)
 }
+
+var teamProfileTpl = `
+*Team name:* {{ .Name }}
+*Country:* {{ .Country }}
+*World ranking:* {{ .WorldRanking }}
+*Weeks in top30 for core:* {{ .WeekInTop30 }}
+*Average player age:* {{ .AveragePlayerAge }}
+*Players:*
+{{- range .Players }}
+- [{{ .Name }}]({{ .URL }})
+{{- end }}
+*Links:*
+{{- range .Links }}
+- {{ . -}}
+{{ end }}
+*Trophies:*
+{{- range .Trophies }}
+- {{ . -}}
+{{ end }}
+*Ongoing & upcoming events and leagues:*
+{{- range .UpcomingEvents }}
+- {{ .Name }}, {{ .Date -}}
+{{ end }}
+{{ if .UpcomingMatches -}}
+*Upcoming matches:*
+{{- range .UpcomingMatches }}
+- {{ .Event -}}:
+		{{- range .Matches }}
+  - {{ .Date }}, [{{ .Team1 }} vs {{ .Team2 }}]({{ .URL }})
+		{{- end }}
+	{{- end }}
+{{- end }}
+`
