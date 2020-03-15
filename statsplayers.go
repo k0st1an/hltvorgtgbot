@@ -1,14 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
+	"text/template"
 
 	"github.com/PuerkitoBio/goquery"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
 const statsPlayersTop = 30
+
+type statsPlayersData struct {
+	RatingVersion string
+	Players       []ratePlayer
+}
+
+type ratePlayer struct {
+	Name, Team, Maps, KDDiff, KD, Rate, URL string
+}
 
 func statsPlayers(chatID int64) {
 	res, err := request(baseURL + "/stats/players")
@@ -22,38 +33,60 @@ func statsPlayers(chatID int64) {
 		log.Fatalln(err)
 	}
 
-	text := "*Stats players* (name, team, maps, K/D Diff, K/D, rating 1.0):\n"
+	var rate statsPlayersData
+
+	rate.RatingVersion = doc.Find(".ratingDesc").Text()
 
 	doc.Find("tbody tr").Each(func(i int, s *goquery.Selection) {
 		if s.Index() < statsPlayersTop {
-			if link, ok := s.Find("td a").Attr("href"); ok {
-				text = text + fmt.Sprintf("%d. [%s](%s): ", i+1, s.Find("td a").Text(), baseURL+link)
-			} else {
-				text = text + fmt.Sprintf("%d. %s: ", i+1, s.Find("td a").Text())
+			rPlayer := ratePlayer{
+				Name:   s.Find("td a").Text(),
+				Team:   s.Find("td a img").AttrOr("title", "UNKNOWN"),
+				KDDiff: s.Find(".kdDiffCol").Text(),
+				Rate:   s.Find(".ratingCol").Text(),
+				URL:    baseURL + s.Find("td a").AttrOr("href", baseURL),
 			}
 
-			text = text + fmt.Sprintf("%s, ", s.Find("td a img").AttrOr("title", "UNKNOWN")) // team name
-
 			s.Find(".statsDetail").Each(func(i int, s *goquery.Selection) {
-				if i == 0 {
-					text = text + fmt.Sprintf("%s, ", s.Text())
+				switch i {
+				case 0:
+					rPlayer.Maps = s.Text()
+				case 1:
+					rPlayer.KD = s.Text()
 				}
 			})
 
-			text = text + fmt.Sprintf("%s, ", s.Find(".kdDiffCol").Text())
-
-			s.Find(".statsDetail").Each(func(i int, s *goquery.Selection) {
-				if i == 1 {
-					text = text + fmt.Sprintf("%s, ", s.Text())
-				}
-			})
-
-			text = text + fmt.Sprintf("%s\n", s.Find(".ratingCol").Text())
+			rate.Players = append(rate.Players, rPlayer)
 		}
 	})
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	tpl, err := template.New("").Funcs(template.FuncMap{
+		"add": func(n, i int) int { return n + i },
+	}).Parse(statsPlayerTpl)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var tplBuf bytes.Buffer
+
+	err = tpl.Execute(&tplBuf, rate)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	fmt.Println(tplBuf.String())
+
+	msg := tgbotapi.NewMessage(chatID, tplBuf.String())
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "markdown"
 	bot.Send(msg)
 }
+
+var statsPlayerTpl = `
+*Stats players* (name, team, maps, K/D Diff, K/D, rating {{ .RatingVersion }}):
+{{- range $i, $item := .Players }}
+{{ add $i 1 }}. [{{ $item.Name }}]({{ $item.URL }}), {{ $item.Team }}, {{ $item.Maps }}, {{ $item.KDDiff }}, {{ $item.KD }}, {{ $item.Rate -}}
+{{ end -}}
+`
