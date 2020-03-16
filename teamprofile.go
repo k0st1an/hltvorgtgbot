@@ -57,7 +57,7 @@ type teamProfileData struct {
 	Links                                                      []string
 	Trophies                                                   []string
 	UpcomingEvents                                             []upcomingEvents
-	UpcomingMatches                                            []upcomingMatch
+	UpcomingMatches                                            []upcomingMatchTP
 }
 
 type upcomingEvents struct {
@@ -68,7 +68,7 @@ type player struct {
 	Name, URL string
 }
 
-type upcomingMatch struct {
+type upcomingMatchTP struct {
 	Event   string
 	Matches []match
 }
@@ -143,7 +143,7 @@ func teamProfile(chatID int64, u string) {
 
 	// Events and matches
 	doc.Find("#matchesBox .match-table").Each(func(i int, l1 *goquery.Selection) {
-		var uMatch upcomingMatch
+		var uMatch upcomingMatchTP
 
 		l1.Find(".team-row").Each(func(i int, l2 *goquery.Selection) { // Event matches
 			if l2.Find(".score-cell").Text() != "-:-" { // checking what will be

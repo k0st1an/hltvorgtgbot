@@ -1,14 +1,31 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
+	"text/template"
 
 	"github.com/PuerkitoBio/goquery"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
 const limitDays = 2
+
+type upcomingMatches struct {
+	LimitDays           int
+	MatchesInDateOrLive []matchesInDateOrLive
+}
+
+type matchesInDateOrLive struct {
+	DateOrLive string
+	IsLive     bool
+	Matches    []upcomingMatch
+}
+
+type upcomingMatch struct {
+	Date, Team1, Team2, Event, BestOf, Stars, URL string
+}
 
 func matches(chatID int64) {
 	res, err := request(baseURL + "/matches")
@@ -22,81 +39,94 @@ func matches(chatID int64) {
 		log.Fatalln(err)
 	}
 
-	var text string
-
-	if doc.Find(".match-day").Length() > 0 || doc.Find(".live-match a").Length() > 0 {
-		text = fmt.Sprintf("*Upcoming CS:GO matches* (%d days):\n", limitDays)
-	}
+	uMatches := upcomingMatches{LimitDays: limitDays}
 
 	// Live matches
-	if doc.Find(".live-match a").Length() > 0 {
-		text = text + "- live:\n"
-	}
+	mInDateOrLive := matchesInDateOrLive{IsLive: true}
 
 	doc.Find(".live-match a").Each(func(i int, live *goquery.Selection) {
-		text = text + fmt.Sprintf("  - %s, ", live.Find(".event-name").Text())
+		uMatch := upcomingMatch{Event: live.Find(".event-name").Text()}
 
-		text = text + "["
-		live.Find(".team-name").Each(func(i int, layer2 *goquery.Selection) {
-			text = text + layer2.Text()
-			if i == 0 {
-				text = text + " vs "
+		live.Find(".team-name").Each(func(i int, l2 *goquery.Selection) {
+			switch i {
+			case 0:
+				uMatch.Team1 = l2.Text()
+			case 1:
+				uMatch.Team2 = l2.Text()
 			}
 		})
-		text = text + fmt.Sprintf("](%s)", baseURL+live.AttrOr("href", "/matches"))
-		text = text + fmt.Sprintf(", %s", live.Find(".bestof").Text())
+		uMatch.URL = baseURL + live.AttrOr("href", "/matches")
+		uMatch.BestOf = live.Find(".bestof").Text()
 
 		if live.Find(".star").Length() > 0 {
-			text = text + ", "
 			for i := 0; i < live.Find(".star").Length(); i++ {
-				text = text + "+"
+				uMatch.Stars = uMatch.Stars + "+"
 			}
 		}
-
-		text = text + "\n"
+		mInDateOrLive.Matches = append(mInDateOrLive.Matches, uMatch)
 	})
 
-	// Matches
+	uMatches.MatchesInDateOrLive = append(uMatches.MatchesInDateOrLive, mInDateOrLive)
+
+	// Upcoming matches
 	doc.Find(".match-day").Each(func(i int, s *goquery.Selection) {
 		if i > limitDays-1 {
 			return
 		}
 
-		text = text + fmt.Sprintf("- %s:\n", s.Find(".standard-headline").Text())
-		s.Find(".match").Each(func(i int, s *goquery.Selection) {
+		mInDateOrLive = matchesInDateOrLive{DateOrLive: s.Find(".standard-headline").Text()}
 
-			text = text + fmt.Sprintf("  - %s,", s.Find(".time .time").Text())
+		s.Find(".match").Each(func(i int, s *goquery.Selection) {
+			var uMatch upcomingMatch
 
 			if s.Find(".team").Length() == 2 {
+				uMatch.Date = s.Find(".time .time").Text()
+				uMatch.Event = s.Find(".event").Text()
+				uMatch.BestOf = s.Find(".map-text").Text()
+				uMatch.URL = baseURL + s.Find("a").AttrOr("href", "/matches")
+
 				// Match
-				text = text + "["
 				s.Find(".team").Each(func(i int, s *goquery.Selection) {
-					text = text + fmt.Sprintf(" %s", s.Text())
-					if i == 0 {
-						text = text + " vs"
+					switch i {
+					case 0:
+						uMatch.Team1 = s.Text()
+					case 1:
+						uMatch.Team2 = s.Text()
 					}
 				})
-				text = text + fmt.Sprintf("](%s)", baseURL+s.Find("a").AttrOr("href", "/matches"))
-
-				text = text + fmt.Sprintf(", %s", s.Find(".event").Text())
-				text = text + fmt.Sprintf(", %s", s.Find(".map-text").Text())
-
 				if s.Find(".star").Length() > 0 {
-					text = text + ", "
 					for i := 0; i < s.Find(".star").Length(); i++ {
-						text = text + "+"
+						uMatch.Stars = uMatch.Stars + "+"
 					}
 				}
 			} else {
 				// Event
-				text = text + fmt.Sprintf(" %s, ", s.Find(".placeholder-text-cell").Text())
+				uMatch.Event = s.Find(".placeholder-text-cell").Text()
 			}
 
-			text = text + "\n"
+			mInDateOrLive.Matches = append(mInDateOrLive.Matches, uMatch)
 		})
+
+		uMatches.MatchesInDateOrLive = append(uMatches.MatchesInDateOrLive, mInDateOrLive)
 	})
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	tpl, err := template.New("").Parse(matchesTpl)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var tplBuf bytes.Buffer
+
+	err = tpl.Execute(&tplBuf, uMatches)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	fmt.Println(tplBuf.String())
+
+	msg := tgbotapi.NewMessage(chatID, tplBuf.String())
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "markdown"
 
@@ -105,3 +135,20 @@ func matches(chatID int64) {
 		log.Println(err)
 	}
 }
+
+var matchesTpl = `
+{{- range $i, $item := .MatchesInDateOrLive -}}
+	{{ if $item.IsLive -}}
+- Live matches:
+	{{- else }}
+- {{ $item.DateOrLive }}:
+	{{- end }}
+	{{- range $item.Matches }}
+		{{- if .Team1 }}
+  - {{ if not $item.IsLive }}{{ .Date }}, {{ end }}[{{ .Team1 }} vs {{ .Team2 }}]({{ .URL }}), {{ .Event }}, {{ .BestOf }}{{ if .Stars }}, {{ .Stars }}{{ end -}}
+		{{ else }}
+  - {{ .Event -}}
+		{{ end -}}
+	{{ end -}}
+{{ end -}}
+`
