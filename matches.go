@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"log"
 	"text/template"
 
@@ -30,13 +29,15 @@ type upcomingMatch struct {
 func matches(chatID int64) {
 	res, err := request(baseURL + "/matches")
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
+		return
 	}
 	defer res.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
+		return
 	}
 
 	uMatches := upcomingMatches{LimitDays: limitDays}
@@ -123,8 +124,6 @@ func matches(chatID int64) {
 		log.Println(err)
 		return
 	}
-
-	fmt.Println(tplBuf.String())
 
 	msg := tgbotapi.NewMessage(chatID, tplBuf.String())
 	msg.DisableWebPagePreview = true
